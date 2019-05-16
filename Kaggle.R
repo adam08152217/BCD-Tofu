@@ -1,0 +1,483 @@
+---
+title: "kaggle project"
+output: html_document
+---
+
+```{r, echo=TRUE}
+#Step 1: Reading Data
+#1.using library "readr" to read csv data
+library(stringr)
+library(lubridate)
+library(readr)
+library(stringr)
+library(lubridate)
+library(carData)
+library(car)
+library(ggplot2)
+
+#library(stringr)
+#library(lubridate)
+#put data under the file of input
+#file.train <- "train.csv"
+#file.test <- "test.csv"
+
+#1.read data
+data.train <- read_csv(file="train.csv")
+data.train <- data.frame(data.train)
+
+data.test <- read_csv(file="test.csv")
+data.test <- data.frame(data.test)
+```
+
+```{r, echo=TRUE}
+#2.Deal with missing data, make all the data usable
+#Package：lubridate(date)；stringr(character string)
+#input：data.train,data.test
+#output：dt.1
+
+
+
+#copy data.train
+data.train.1 <- data.train
+#budget
+budget.1 <- data.train.1$budget
+budget.1[is.na(budget.1) | is.infinite(budget.1)] <- 0 
+#date
+#date.release <- as.Date(data.train.1$release_date,format="%m/%d/%y")
+#date.release.split <- str_split(data.train.1$release_date,"/",simplify =T)
+date.release <- mdy(data.train.1$release_date)
+
+#week of year
+week.year <- week(date.release)
+#day of week (1 ~ 7)
+day.week <- wday(date.release)
+#year to now
+year.to.now <- year(today()) - year(date.release)
+#number of genres
+genres.num <- str_count(data.train.1$genres,"name")
+genres.num[is.na(genres.num) | is.infinite(genres.num)] <- 0
+#number of keywords
+keyword.num <- str_count(data.train.1$Keywords,"name")
+keyword.num[is.na(keyword.num) | is.infinite(keyword.num)] <- 0
+#language
+language <- as.factor(ifelse(data.train.1$original_language=="en" ,"en","no"))
+#popularity
+pop <- data.train.1$popularity
+pop[is.na(pop) | is.infinite(pop)] <- 0
+#number of companies
+company.num <- str_count(data.train.1$production_companies,"name")
+company.num[is.na(company.num) | is.infinite(company.num)] <-0
+#number of countries
+country.num <- str_count(data.train.1$production_countries,"name")
+#runtime
+runtime <- data.train.1$runtime
+runtime[is.na(runtime) | is.infinite(runtime)] <- 0
+#numbers of spoke
+spoke.num <- str_count(data.train.1$spoken_languages,"iso_639_1")
+spoke.num[is.na(spoke.num) | is.infinite(spoke.num)] <- 0
+#number of cast
+cast.num <- str_count(data.train.1$cast,"cast_id")
+cast.num[is.na(cast.num) | is.infinite(cast.num)] <- 0
+#number of crew
+crew.num <- str_count(data.train.1$crew,"name")
+crew.num[is.na(crew.num) | is.infinite(crew.num)] <- 0
+#revenue
+revenue <- data.train.1$revenue
+revenue[is.na(data.train.1$revenue) | is.infinite(data.train.1$revenue)] <- 0
+
+#Step 2: Transport Data
+#bind all the data 
+dt.1 <- data.frame(budget.1,week.year,day.week,year.to.now,
+                  genres.num,keyword.num,language,pop,company.num,country.num,
+                  runtime,spoke.num,cast.num,crew.num,revenue)
+colnames(dt.1)[1] <- c("budget")
+
+#the revenue of some movies are small (less than 1000)
+#we need to further deal with these data or delete them 
+#we take the percentage of 0.1, which means delete the last 10%
+quantile.thresh.low <- 0.05
+quantile.thresh.up <- 1
+dt.1 <- dt.1[dt.1$revenue >= quantile(dt.1$revenue,quantile.thresh.low) & dt.1$revenue <= quantile(dt.1$revenue,quantile.thresh.up),]
+
+
+#print out the class of each column
+#mclass(class,dt.1)
+```
+
+```{R,echo=TRUE}
+#Step 3. training model
+#we chose linear model and screened the significant variables
+#since the amount of budget and revenue are so large, we made them logarithm 
+#package：car(vif to test multicollinearity)
+#input：dt.1
+#output：lm.mod.log.cut（the model contains 10 variables???
+
+#for train use 
+dt.train <- dt.1
+dt.train$language <- NULL
+
+#fit linear model
+lm.mod.1 <- lm(revenue ~ .-revenue,data=dt.train)
+#output
+#summary(lm.mod.1)
+###output
+#different threshold each time（quantile.thresh.low <- 0.05, result in different values.
+#threshold=0.05
+###----------------------------------------------------------
+# Coefficients:
+#               Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)  1.808e+06  1.172e+07   0.154 0.877422    
+# budget       2.481e+00  5.179e-02  47.905  < 2e-16 ***
+#   week.year   -2.107e+04  1.120e+05  -0.188 0.850747    
+# day.week    -4.865e+06  1.176e+06  -4.137 3.63e-05 ***
+#   year.to.now  3.177e+05  1.089e+05   2.917 0.003563 ** 
+#   genres.num  -2.356e+06  1.524e+06  -1.546 0.122126    
+# keyword.num  1.089e+06  2.781e+05   3.914 9.31e-05 ***
+#   pop          2.434e+06  1.460e+05  16.672  < 2e-16 ***
+#   company.num -3.565e+06  9.363e+05  -3.808 0.000143 ***
+#   country.num -5.134e+06  2.430e+06  -2.113 0.034725 *  
+#   runtime      1.378e+05  7.940e+04   1.735 0.082772 .  
+# spoke.num   -1.872e+06  1.931e+06  -0.970 0.332211    
+# cast.num     5.245e+05  1.105e+05   4.749 2.15e-06 ***
+#   crew.num     8.374e+02  6.918e+04   0.012 0.990343    
+# ---
+#   Signif. codes:  0 ???***??? 0.001 ???**??? 0.01 ???*??? 0.05 ???.??? 0.1 ??? ??? 1
+# 
+# Residual standard error: 86880000 on 2795 degrees of freedom
+# (41 observations deleted due to missingness)
+# Multiple R-squared:  0.6222,	Adjusted R-squared:  0.6205 
+#F-statistic: 354.1 on 13 and 2795 DF,  p-value: < 2.2e-16
+###----------------------------------------------------------
+
+#the model is meaningful（p-value: < 2.2e-16)
+#big coefficient make it hard to explain the impact of each variable
+
+
+
+#since the amount of budget and revenue are so large, we made them logarithm
+#thus made the exponential distribution to normal distribution
+#sometimes logarithm would make 0 to -inf，thus we +1 here
+dt.train.log <- dt.train
+
+dt.train.log$budget <- log(dt.train.log$budget + 1,base=exp(1))
+dt.train.log$revenue <- log(dt.train.log$revenue + 1,base=exp(1))
+# dt.train.log$budget <- log10(dt.train.log$budget + 1)
+# dt.train.log$revenue <- log10(dt.train.log$revenue + 1)
+#fit linear model
+lm.mod.log <- lm(revenue ~ .-revenue,data=dt.train.log)
+#output
+#summary(lm.mod.log)
+#different threshold each time（quantile.thresh.low <- 0.05, result in different values.
+#threshold=0.05
+###----------------------------------------------------------
+# Coefficients:
+#                Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)   12.392370   0.234938  52.747  < 2e-16 ***
+#   budget       0.111152   0.005016  22.162  < 2e-16 ***
+#   week.year    0.002016   0.002268   0.889  0.37419    
+# day.week       0.007399   0.023782   0.311  0.75574    
+# year.to.now    0.018503   0.002206   8.387  < 2e-16 ***
+#   genres.num   0.173273   0.030547   5.672 1.55e-08 ***
+#   keyword.num  0.024249   0.005657   4.287 1.87e-05 ***
+#   pop          0.024927   0.002906   8.578  < 2e-16 ***
+#   company.num  0.059217   0.018908   3.132  0.00176 ** 
+#   country.num -0.142214   0.049192  -2.891  0.00387 ** 
+#   runtime      0.007402   0.001598   4.631 3.80e-06 ***
+#   spoke.num    0.086032   0.039096   2.201  0.02785 *  
+#   cast.num     0.014480   0.002234   6.481 1.07e-10 ***
+#   crew.num     0.011382   0.001364   8.346  < 2e-16 ***
+#   ---
+#   Signif. codes:  0 ???***??? 0.001 ???**??? 0.01 ???*??? 0.05 ???.??? 0.1 ??? ??? 1
+# 
+# Residual standard error: 1.758 on 2795 degrees of freedom
+# (41 observations deleted due to missingness)
+# Multiple R-squared:  0.3826,	Adjusted R-squared:  0.3797 
+# F-statistic: 133.2 on 13 and 2795 DF,  p-value: < 2.2e-16
+###----------------------------------------------------------
+
+#here, the model is meaningful（p-value: < 2.2e-16）???
+#and coefficient is not so big
+
+
+#fit the model, delete some non-significant variables
+p.name <- "Pr(>|t|)"
+p.thresh <- 0.05
+#obtain variables with sig p value
+rownames.of.data <- rownames(coef(summary(lm.mod.log))[coef(summary(lm.mod.log))[,p.name] < p.thresh,])
+
+#extract data, delete the first variable (intercept) 
+dt.train.log.cut <- dt.train.log[,c(rownames.of.data[-1],"revenue")]
+
+lm.mod.log.cut <- lm(revenue ~ .-revenue , data=dt.train.log.cut)
+#summary(lm.mod.log.cut)
+#different threshold each time（quantile.thresh.low <- 0.05, result in different values.
+#threshold=0.05
+###----------------------------------------------------------
+# Coefficients:
+#                Estimate Std. Error t value Pr(>|t|)    
+#   (Intercept) 12.467237   0.193878  64.305  < 2e-16 ***
+#   budget       0.111299   0.005010  22.215  < 2e-16 ***
+#   year.to.now  0.018694   0.002164   8.639  < 2e-16 ***
+#   genres.num   0.172332   0.030524   5.646 1.81e-08 ***
+#   keyword.num  0.024110   0.005651   4.266 2.05e-05 ***
+#   pop          0.024840   0.002902   8.559  < 2e-16 ***
+#   company.num  0.058573   0.018891   3.100  0.00195 ** 
+#   country.num -0.142596   0.049156  -2.901  0.00375 ** 
+#   runtime      0.007571   0.001584   4.781 1.84e-06 ***
+#   spoke.num    0.086814   0.039019   2.225  0.02617 *  
+#   cast.num     0.014458   0.002234   6.473 1.13e-10 ***
+#   crew.num     0.011409   0.001362   8.374  < 2e-16 ***
+# ---
+#   Signif. codes:  0 ???***??? 0.001 ???**??? 0.01 ???*??? 0.05 ???.??? 0.1 ??? ??? 1
+# 
+# Residual standard error: 1.758 on 2797 degrees of freedom
+# (41 observations deleted due to missingness)
+# Multiple R-squared:  0.3824,	Adjusted R-squared:  0.3799 
+# F-statistic: 157.4 on 11 and 2797 DF,  p-value: < 2.2e-16
+###here the model is meaningful（p-value: < 2.2e-16???
+#all p values here are significant（Pr(>|t|)column), which means we deleted unrelated variables
+
+###
+#conclusion: based on the data we have, the linear model could be used to predict the revenue
+
+```
+
+```{r,echo=TRUE}
+#Step 4:Draw the plot
+#Input:dt.1,lm.mod.log.cut
+#Original Data:dt.1.draw the plot of orinial data of budget,revenue and after log transform.
+#Model:lm.mod.log.cut Draw each parameters of the model.
+
+
+
+budget.log <- log(dt.1$budget + 1,base=exp(1))
+revenue.log <- log(dt.1$revenue + 1,base=exp(1))
+
+#draw the 4*4 plot
+op <- par(mfrow=c(2,2))
+hist(dt.1$budget,breaks=40,main="Histogram of Budget",xlab="Budget")
+hist(dt.1$revenue,breaks=40,main="Histogram of Revenue",xlab="Revenue")
+hist(budget.log,breaks=40,main="Histogram of Ln(Budget)",xlab="Ln(Budget)")
+hist(revenue.log,breaks=40,main="Histogram of Ln(Revenue)",xlab="Ln(Revenue)")
+par(op)
+
+#Draw the log budget and revenue and the density of residual.
+#Remove the bottom of the data
+budget.log.1 <- budget.log[budget.log > quantile(budget.log,0.2)]
+
+op <- par(mfrow=c(1,2))
+h<- hist(budget.log.1,breaks=40,main="Histogram of Ln(Budget)",xlab="Ln(Budget)",prob=TRUE)
+lines(density(budget.log.1), # density plot
+      lwd = 2, # thickness of line
+      col = "chocolate3")
+
+hist(revenue.log,breaks=40,main="Histogram of Ln(Revenue)",xlab="Ln(Revenue)",prob=TRUE)
+lines(density(revenue.log), # density plot
+      lwd = 2, # thickness of line
+      col = "chocolate3")
+par(op)
+
+
+
+#Draw each parameters of the model
+coefs <- summary(lm.mod.log.cut)$coefficients[-1,1,drop=F]
+ord.1 <- order(coefs[,1],decreasing = T)
+barplot(coefs[ord.1],names.arg = rownames(coefs)[ord.1],las=2)
+
+
+
+#Draw all distributions of each variable in dt.1
+dt.plot <- dt.1
+dt.plot$language <- NULL
+col.names <- colnames(dt.plot)
+#Draw the 1*2
+op <- par(mfrow=c(1,2))
+for(i in 1:length(col.names))
+{
+  d.p <- dt.plot[,i]
+  d.p <- na.omit(d.p)
+  hist(d.p,breaks=40,main=paste0("Histogram of ",col.names[i]),xlab=col.names[i],probability = T)
+  lines(density(d.p), # density plot
+        lwd = 2, # thickness of line
+        col = "chocolate3")
+  
+  
+}
+par(op)
+
+
+#Conclusion
+#Comparison:
+#Through plot of histogram of genres, the scope of the number of genres from the 1 to 5
+#Through the plot of keyword.num, we could find most film contained to the 1 to 10, we do the analysis primary, less words lead to higher revenue.
+#Through the histogram of budget, obviously, usually if one film chase higher revenue, the company would plan more budget,and focus on the 10 to 20.
+#Many of films are close to the 15 to 20
+#However, there are several outliers in the value of budget in 0, we guess these films did not do enough research, maybe they are too old to detective.
+#In the histogram of year, we found these test data focus on recent 40 years.
+#Through the cast and crew histogram, we could easily to sum up most film would prefer as few as possible of person who take part in the film
+#From the country histogram, the mode is less then 2.
+#In runtime, most film would prefer the 100 to 150, we guess maybe runtime more or less than 100 minutes is more comfortable for customers, they may would pay this kind of movies.
+#In the company Histogram, however, most films are not include single one, maybe more than 2 companies cooperate would create the higher revenue.
+#Associated above primary analysis,we would select some model to test the correlation of these parameters whether or not they would reslut the revenue.
+```
+
+```{r, echo=TRUE}
+#Step 5.test model
+
+#Our group creat some plots to compare the multicollinearity, residual and normal distribution. 
+#Further more, we do the normality test to illustrate the residual. 
+
+#Conclusion and Discusssion
+
+#Input: lm.mod.log.cut
+
+mod.local <- lm.mod.log.cut
+
+
+
+#
+#First one, as usual, for some special variables with “vif" is more than 5 or 10, they have the character of multicollinearity. 
+#Hence, we need remove these variables.eed verify whether or not these variables have the character of multicollinearity
+
+#call car::vif() to test Multicollinearity
+print(vif(mod.local))
+###----------------------------------------------------------
+#   budget year.to.now  genres.num keyword.num         pop company.num country.num     runtime 
+# 1.198873    1.032557    1.050052    1.096000    1.178471    1.288354    1.169670    1.093798 
+# cast.num    crew.num 
+# 1.285309    1.379143
+###----------------------------------------------------------
+
+
+#Step 2, Verify the normality of residual
+#Draw the plot of the residual.
+qqnorm(residuals(mod.local))
+qqline(residuals(mod.local),col="red")
+#Draw the plot of residual density.
+plot(density(residuals(mod.local)))
+x <- seq(-4,4,length.out = 500)
+y <- dnorm(x,mean=0,sd=sd(residuals(mod.local)))
+lines(x,y,type="l",col="red")
+
+#Normality Test
+#From the result, one could find the test result can not fit the normal distribution, however, the curve of the density is close to the normal distribution.
+
+#In further analysis, the part of residuals of variables are belong to outliers.
+#Especially, the normal distribution is so sensitive to these outliers.
+print(shapiro.test(residuals(mod.local)))
+# Shapiro-Wilk normality test
+# 
+# data:  residuals(mod.local)
+# W = 0.97732, p-value < 2.2e-16
+#Unfortunatly, it can not fit the normal distribution after recompose.
+
+#Calculate the value of root of MSE.
+mod.rmse <- sqrt(mean(residuals(mod.local) ^ 2)) 
+
+#############################################
+#Conclusion:
+
+#1.Depending upon the exist data(through the simply log transform), our group plan to use the linear regression to predict the revenue(based the value of p is small enough).
+#2.We select the parameter test of independent of model, in order to sort out useful variables which can predict the revenue effectively.
+#3.After screening these variables, the model fitted the multiple collinearity detection. 
+
+#############################################
+#Discussion:
+#1.The residual of model has not fitted the normal distribution.
+#Hence, the first question, whether or not there are other independent variables could be accpeted to fit the more effective model.
+#2.The question 2, should we do more analysis about outliers of the value of residual, to seek for the advanced information(for example, super star, more grandness budget)
+#3.Question 3, after log transform of the original data, whether or not we would loss some infrmation, could the model could be more effective in other method.
+#4.Question 4, whether or not there is more fitted model to predict the revenue, such as GLM or SVM.
+```
+
+```{r, echo=TRUE}
+#Input the test data in the model.
+
+
+#copy the data.train
+data.train.1 <- data.test
+#delete the line of "release_data==NA"
+row.na <- which(is.na(data.train.1$release_date))
+data.train.1 <- data.train.1[-row.na,]
+
+id.1 <- data.train.1$id
+
+#budget
+budget.1 <- data.train.1$budget
+budget.1[is.na(budget.1) | is.infinite(budget.1)] <- 0 
+#date
+#date.release <- as.Date(data.train.1$release_date,format="%m/%d/%y")
+date.release.split <- str_split(data.train.1$release_date,"/",simplify =T)
+strlength <- str_length(date.release.split[,1]) == 4
+# date.release.1 <- rep(today(),length(strlength))
+# date.release.1[strlength] <- ymd(data.train.1$release_date[strlength])
+# date.release.1[!strlength] <- mdy(data.train.1$release_date[!strlength])
+
+#date.frame <- data.frame(releaste_date=data.train.1$release_date,strlength=str_length(date.release.split[,1]))
+date.release <- mdy(data.train.1$release_date[1])
+for(i in 2:length(strlength))
+{
+  date.1 <- 0
+  if(strlength[i])
+  {
+    date.1 <- ymd(data.train.1$release_date[i])
+  }else{
+    date.1 <- mdy(data.train.1$release_date[i])
+  }
+  date.release <- c(date.release,date.1)
+}
+
+
+#week of year
+week.year <- week(date.release)
+#day of week (1 ~ 7)
+day.week <- wday(date.release)
+#year to now
+year.to.now <- year(today()) - year(date.release)
+#number of genres
+genres.num <- str_count(data.train.1$genres,"name")
+genres.num[is.na(genres.num) | is.infinite(genres.num)] <- 0
+#number of keywords
+keyword.num <- str_count(data.train.1$Keywords,"name")
+keyword.num[is.na(keyword.num) | is.infinite(keyword.num)] <- 0
+#language
+#language <- as.factor(ifelse(data.train.1$original_language=="en" ,"en","no"))
+#popularity
+pop <- data.train.1$popularity
+pop[is.na(pop) | is.infinite(pop)] <- 0
+#number of companies
+company.num <- str_count(data.train.1$production_companies,"name")
+company.num[is.na(company.num) | is.infinite(company.num)] <-0
+#number of countries
+country.num <- str_count(data.train.1$production_countries,"name")
+#runtime
+runtime <- data.train.1$runtime
+runtime[is.na(runtime) | is.infinite(runtime)] <- 0
+#numbers of spoke
+spoke.num <- str_count(data.train.1$spoken_languages,"iso_639_1")
+spoke.num[is.na(spoke.num) | is.infinite(spoke.num)] <- 0
+#number of cast
+cast.num <- str_count(data.train.1$cast,"cast_id")
+cast.num[is.na(cast.num) | is.infinite(cast.num)] <- 0
+#number of crew
+crew.num <- str_count(data.train.1$crew,"name")
+crew.num[is.na(crew.num) | is.infinite(crew.num)] <- 0
+#revenue
+#revenue <- data.train.1$revenue
+#revenue[is.na(data.train.1$revenue) | is.infinite(data.train.1$revenue)] <- 0
+
+#Notice: using the log transform the original data.
+budget.1 <- log(budget.1 + 1,base=exp(1))
+#bind all the data
+dt.1 <- data.frame(budget.1,year.to.now,
+                   genres.num,keyword.num,pop,company.num,country.num,
+                   runtime,cast.num,crew.num)
+colnames(dt.1)[1] <- c("budget")
+
+pred.1 <- predict(lm.mod.log.cut,newdata=dt.1)
+#Inverse the log function.
+pred.2 <- exp(1) ^ pred.1 - 1
+output.1 <- data.frame(id=id.1,revenue=pred.2)
+write.csv(output.1, file = "submission.csv",row.names=FALSE, quote = FALSE)
+```
+
