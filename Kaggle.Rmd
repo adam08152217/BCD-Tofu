@@ -397,9 +397,9 @@ mod.rmse <- sqrt(mean(residuals(mod.local) ^ 2))
 #copy the data.train
 data.train.1 <- data.test
 #delete the line of "release_data==NA"
-row.na <- which(is.na(data.train.1$release_date))
-data.train.1 <- data.train.1[-row.na,]
-
+#row.na <- which(is.na(data.train.1$release_date))
+#data.train.1 <- data.train.1[-row.na,]
+data.train.1$release_date[is.na(data.train.1$release_date)] <- "2019/1/1"
 id.1 <- data.train.1$id
 
 #budget
@@ -478,6 +478,7 @@ pred.1 <- predict(lm.mod.log.cut,newdata=dt.1)
 #Inverse the log function.
 pred.2 <- exp(1) ^ pred.1 - 1
 output.1 <- data.frame(id=id.1,revenue=pred.2)
+output.1[is.na(output.1)]<-0
 write.csv(output.1, file = "submission.csv",row.names=FALSE, quote = FALSE)
 ```
 
